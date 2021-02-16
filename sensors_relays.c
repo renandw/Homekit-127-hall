@@ -16,16 +16,13 @@
 #include <bh1750/bh1750.h>
 #include <button.h>
 #include <toggle.h>
+#include "ota-api.h"
 
 //LUX SENSOR PINS
 #define SCL_PIN 5 // Wemos D1
 #define SDA_PIN 4 // Wemos D2
 #define I2C_BUS 0
 #define SENSOR_POLL_PERIOD 2000  // reading time
-
-#define FIRMWARE_VERSION "1.0.0"
-#define MANUFACTURER_DEFAULT "HomeKid™"
-#define MODEL_DEFAULT " LightSensor"
 
 #define ALLOWED_FACTORY_RESET_TIME 30000
 
@@ -53,11 +50,12 @@ homekit_characteristic_t occupancy_detected = HOMEKIT_CHARACTERISTIC_(OCCUPANCY_
 homekit_characteristic_t occupancy_detected_2 = HOMEKIT_CHARACTERISTIC_(OCCUPANCY_DETECTED, 0);
 homekit_characteristic_t lux = HOMEKIT_CHARACTERISTIC_(CURRENT_AMBIENT_LIGHT_LEVEL, 0, .min_step = (float[]) {0.01}, .min_value = (float[]) {0}, .max_value = (float[]) {100000}); // 
 homekit_characteristic_t fault = HOMEKIT_CHARACTERISTIC_(STATUS_FAULT, 0);
-homekit_characteristic_t manufacturer = HOMEKIT_CHARACTERISTIC_(MANUFACTURER,  MANUFACTURER_DEFAULT);
-homekit_characteristic_t model        = HOMEKIT_CHARACTERISTIC_(MODEL, MODEL_DEFAULT);
-homekit_characteristic_t revision     = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION,  FIRMWARE_VERSION);
-homekit_characteristic_t name = HOMEKIT_CHARACTERISTIC_(NAME, NULL);
-homekit_characteristic_t serial = HOMEKIT_CHARACTERISTIC_(SERIAL_NUMBER, NULL);
+homekit_characteristic_t ota_trigger  = API_OTA_TRIGGER;
+homekit_characteristic_t manufacturer = HOMEKIT_CHARACTERISTIC_(MANUFACTURER,  "X");
+homekit_characteristic_t serial       = HOMEKIT_CHARACTERISTIC_(SERIAL_NUMBER, "1");
+homekit_characteristic_t model        = HOMEKIT_CHARACTERISTIC_(MODEL,         "Z");
+homekit_characteristic_t revision     = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION,  "0.0.0");
+homekit_characteristic_t name = HOMEKIT_CHARACTERISTIC_(NAME, "LuxMotionRelay");
 
 
 
@@ -178,48 +176,56 @@ void sensor_callback_2(bool high, void *context) {
 
 //HOMEKIT ACCESSORIES SECTION
 homekit_accessory_t *accessories[] = {
-    HOMEKIT_ACCESSORY(.id=1, .category=homekit_accessory_category_sensor, .services=(homekit_service_t*[]) {
-        HOMEKIT_SERVICE(ACCESSORY_INFORMATION, .characteristics=(homekit_characteristic_t*[]) {
+      HOMEKIT_ACCESSORY(
+          .id=1,
+          .category=homekit_accessory_category_switch,
+          .services=(homekit_service_t*[]){
+        HOMEKIT_SERVICE(ACCESSORY_INFORMATION, .characteristics=(homekit_characteristic_t*[]){
+          HOMEKIT_CHARACTERISTIC(IDENTIFY, light_identify),
+          &name,
+          &manufacturer,
+          &serial,
+          &model,
+          &revision,
+          &ota_trigger,
+        NULL
+    }),
+
+    HOMEKIT_SERVICE(LIGHTBULB, .primary=true, .characteristics=(homekit_characteristic_t*[]){
+       HOMEKIT_CHARACTERISTIC(NAME, "Lâmpada 01"),
+        &lightbulb_on_1,
+        NULL
+    }),
+    NULL,
+  }),
+  HOMEKIT_ACCESSORY(
+        .id=2,
+        .category=homekit_accessory_category_switch,
+        .services=(homekit_service_t*[]){
+          HOMEKIT_SERVICE(ACCESSORY_INFORMATION, .characteristics=(homekit_characteristic_t*[]){
+            HOMEKIT_CHARACTERISTIC(IDENTIFY, light_identify),
             &name,
             &manufacturer,
             &serial,
             &model,
             &revision,
-            HOMEKIT_CHARACTERISTIC(IDENTIFY, sensor_identify),
             NULL
-        }),
-            HOMEKIT_SERVICE(LIGHT_SENSOR, .primary=true,  .characteristics=(homekit_characteristic_t*[]) {
-            HOMEKIT_CHARACTERISTIC(NAME, "Ambient Light Sensor"),
-            &lux,
-            &fault,
+      }),  
+
+      HOMEKIT_SERVICE(LIGHTBULB, .characteristics=(homekit_characteristic_t*[]){
+            HOMEKIT_CHARACTERISTIC(NAME, "Lâmpada 02"), 
+            &lightbulb_on_2,
             NULL
-        }),
-        NULL
-}),
-    HOMEKIT_ACCESSORY(.id=2, .category=homekit_accessory_category_sensor, .services=(homekit_service_t*[]) {
-        HOMEKIT_SERVICE(ACCESSORY_INFORMATION, .characteristics=(homekit_characteristic_t*[]) {
-            HOMEKIT_CHARACTERISTIC(NAME, "Occupancy Sensor"),
-            HOMEKIT_CHARACTERISTIC(MANUFACTURER, "HaPK"),
-            &serial,
-            HOMEKIT_CHARACTERISTIC(MODEL, "Occupancy Sensor"),
-            HOMEKIT_CHARACTERISTIC(FIRMWARE_REVISION, "1"),
-            HOMEKIT_CHARACTERISTIC(IDENTIFY, occupancy_identify),
-            NULL
-  }),
-        HOMEKIT_SERVICE(OCCUPANCY_SENSOR, .characteristics=(homekit_characteristic_t*[]) {
-            HOMEKIT_CHARACTERISTIC(NAME, "Occupancy Sensor"),
-            &occupancy_detected,
-            NULL
-        }),
-        NULL
+      }),
+      NULL
   }),
     HOMEKIT_ACCESSORY(.id=3, .category=homekit_accessory_category_sensor, .services=(homekit_service_t*[]) {
         HOMEKIT_SERVICE(ACCESSORY_INFORMATION, .characteristics=(homekit_characteristic_t*[]) {
             HOMEKIT_CHARACTERISTIC(NAME, "Occupancy Sensor_2"),
-            HOMEKIT_CHARACTERISTIC(MANUFACTURER, "HaPK"),
-            HOMEKIT_CHARACTERISTIC(SERIAL_NUMBER, "1"),
-            HOMEKIT_CHARACTERISTIC(MODEL, "Occupancy Sensor"),
-            HOMEKIT_CHARACTERISTIC(FIRMWARE_REVISION, "1"),
+            &name,
+            &serial,
+            &model,
+            &revision,
             HOMEKIT_CHARACTERISTIC(IDENTIFY, occupancy_identify),
             NULL
 }),      
@@ -230,49 +236,42 @@ homekit_accessory_t *accessories[] = {
       }),
       NULL
   }),
-    HOMEKIT_ACCESSORY(
-          .id=4,
-          .category=homekit_accessory_category_switch,
-          .services=(homekit_service_t*[]){
-            HOMEKIT_SERVICE(ACCESSORY_INFORMATION, .characteristics=(homekit_characteristic_t*[]){
-            HOMEKIT_CHARACTERISTIC(IDENTIFY, light_identify),
-            HOMEKIT_CHARACTERISTIC(NAME, "Occupancy Sensor_3"),
-            HOMEKIT_CHARACTERISTIC(MANUFACTURER, "HaPK"),
-            HOMEKIT_CHARACTERISTIC(SERIAL_NUMBER, "1"),
-            HOMEKIT_CHARACTERISTIC(MODEL, "Occupancy Sensor"),
-            HOMEKIT_CHARACTERISTIC(FIRMWARE_REVISION, "1"),
-            NULL
-        }),
-
-        HOMEKIT_SERVICE(LIGHTBULB, .characteristics=(homekit_characteristic_t*[]){
-	         HOMEKIT_CHARACTERISTIC(NAME, "Occupancy Sensor_3"),
-	          &lightbulb_on_1,
-            NULL
-        }),
-        NULL,
+  HOMEKIT_ACCESSORY(.id=4, .category=homekit_accessory_category_sensor, .services=(homekit_service_t*[]) {
+      HOMEKIT_SERVICE(ACCESSORY_INFORMATION, .characteristics=(homekit_characteristic_t*[]) {
+          &name,
+          &manufacturer,
+          &serial,
+          &model,
+          &revision,
+          HOMEKIT_CHARACTERISTIC(IDENTIFY, occupancy_identify),
+          NULL
+}),
+      HOMEKIT_SERVICE(OCCUPANCY_SENSOR, .characteristics=(homekit_characteristic_t*[]) {
+          HOMEKIT_CHARACTERISTIC(NAME, "Occupancy Sensor"),
+          &occupancy_detected,
+          NULL
       }),
+      NULL
+}),
 
-    HOMEKIT_ACCESSORY(
-          .id=5,
-          .category=homekit_accessory_category_switch,
-          .services=(homekit_service_t*[]){
-            HOMEKIT_SERVICE(ACCESSORY_INFORMATION, .characteristics=(homekit_characteristic_t*[]){
-            HOMEKIT_CHARACTERISTIC(IDENTIFY, light_identify),
-            HOMEKIT_CHARACTERISTIC(NAME, "Occupancy Sensor_4"),
-            HOMEKIT_CHARACTERISTIC(MANUFACTURER, "HaPK"),
-            HOMEKIT_CHARACTERISTIC(SERIAL_NUMBER, "1"),
-            HOMEKIT_CHARACTERISTIC(MODEL, "Occupancy Sensor"),
-            HOMEKIT_CHARACTERISTIC(FIRMWARE_REVISION, "1"),
-            NULL
-        }),  
-
-        HOMEKIT_SERVICE(LIGHTBULB, .characteristics=(homekit_characteristic_t*[]){
-            HOMEKIT_CHARACTERISTIC(NAME, "Occupancy Sensor_4"),
-            &lightbulb_on_2,
-            NULL
-        }),
-        NULL
-    }),
+      HOMEKIT_ACCESSORY(.id=5, .category=homekit_accessory_category_sensor, .services=(homekit_service_t*[]) {
+          HOMEKIT_SERVICE(ACCESSORY_INFORMATION, .characteristics=(homekit_characteristic_t*[]) {
+              &name,
+              &manufacturer,
+              &serial,
+              &model,
+              &revision,
+              HOMEKIT_CHARACTERISTIC(IDENTIFY, sensor_identify),
+              NULL
+          }),
+              HOMEKIT_SERVICE(LIGHT_SENSOR,  .characteristics=(homekit_characteristic_t*[]) {
+              HOMEKIT_CHARACTERISTIC(NAME, "Ambient Light Sensor"),
+              &lux,
+              &fault,
+              NULL
+          }),
+          NULL
+  }),
     NULL
 };
 
@@ -303,7 +302,6 @@ void create_accessory_name() {
 }
 
 void on_wifi_ready() {
-    homekit_server_init(&config);
 }
 
 
@@ -320,4 +318,10 @@ void user_init(void) {
     if (toggle_create(SENSOR_PIN_2, sensor_callback_2, NULL)) {
     printf("Failed to initialize sensor\n");
     }
+
+    int c_hash=ota_read_sysparam(&manufacturer.value.string_value,&serial.value.string_value,
+                                  &model.value.string_value,&revision.value.string_value);
+    //c_hash=1; revision.value.string_value="0.0.1"; //cheat line
+    config.accessories[0]->config_number=c_hash;
+    homekit_server_init(&config);
 }
