@@ -44,6 +44,17 @@ const int relay_gpio_1 = 0;
 // The GPIO pin that is connected to RELAY#2 on the board.
 const int relay_gpio_2 = 2;
 
+//TOGGLE PINS
+#define TOGGLE_PIN_1 12
+#ifndef TOGGLE_PIN_1
+#error TOGGLE_PIN_1 is not specified
+#endif
+
+#define TOGGLE_PIN_2 14
+#ifndef TOGGLE_PIN_2
+#error TOGGLE_PIN_2 is not specified
+#endif
+
 
 //HOMEKIT CHARACTERISTIC SECTION
 homekit_characteristic_t occupancy_detected = HOMEKIT_CHARACTERISTIC_(OCCUPANCY_DETECTED, 0);
@@ -65,8 +76,7 @@ uint16_t bh1750_reading(i2c_dev_t *dev);
 
 //Reset Configuration
 void reset_configuration_task() {
-    //Flash the LED first before we start the reset
-    printf("Resetting Wifi Config\n");    
+    printf("Resetting Wifi due to toggle pin under ALLOWED_FACTORY_RESET_TIME");
     wifi_config_reset();
     vTaskDelay(1000 / portTICK_PERIOD_MS);
     printf("Resetting HomeKit Config\n");
@@ -127,6 +137,9 @@ void gpio_init() {
 
     gpio_enable(relay_gpio_2, GPIO_OUTPUT);
     relay_write_2(lightbulb_on_2.value.bool_value);
+
+    gpio_enable(TOGGLE_PIN_1, GPIO_INPUT);
+    gpio_enable(TOGGLE_PIN_2, GPIO_INPUT);
 }
 
 void lightbulb_on_1_callback(homekit_characteristic_t *_ch, homekit_value_t on, void *context) {
@@ -137,6 +150,22 @@ void lightbulb_on_2_callback(homekit_characteristic_t *_ch, homekit_value_t on, 
     relay_write_2(lightbulb_on_2.value.bool_value);
 }
 
+//TOGGLE CALLBACKS
+
+void toggle_callback_1(bool high, void *context) {
+    printf("toggle is %s\n", high ? "high" : "low");
+    lightbulb_on_1.value.bool_value = !lightbulb_on_1.value.bool_value;
+    relay_write_1(lightbulb_on_1.value.bool_value);
+    homekit_characteristic_notify(&lightbulb_on_1, lightbulb_on_1.value);
+}
+
+void toggle_callback_2(bool high, void *context) {
+    printf("toggle is %s\n", high ? "high" : "low");
+    lightbulb_on_2.value.bool_value = !lightbulb_on_2.value.bool_value;
+    relay_write_2(lightbulb_on_2.value.bool_value);
+    homekit_characteristic_notify(&lightbulb_on_2, lightbulb_on_2.value);
+    reset_configuration();
+}
 
 //LUX SENSOR SECTION
 void sensor_task(void *_args) {
@@ -187,13 +216,13 @@ homekit_accessory_t *accessories[] = {
           &serial,
           &model,
           &revision,
-          &ota_trigger,
         NULL
     }),
 
     HOMEKIT_SERVICE(LIGHTBULB, .primary=true, .characteristics=(homekit_characteristic_t*[]){
        HOMEKIT_CHARACTERISTIC(NAME, "Lâmpada 01"),
         &lightbulb_on_1,
+        &ota_trigger,
         NULL
     }),
     NULL,
@@ -204,7 +233,7 @@ homekit_accessory_t *accessories[] = {
         .services=(homekit_service_t*[]){
           HOMEKIT_SERVICE(ACCESSORY_INFORMATION, .characteristics=(homekit_characteristic_t*[]){
             HOMEKIT_CHARACTERISTIC(IDENTIFY, light_identify),
-            &name,
+            HOMEKIT_CHARACTERISTIC(NAME, "Lâmpada 02"),
             &manufacturer,
             &serial,
             &model,
@@ -222,7 +251,7 @@ homekit_accessory_t *accessories[] = {
     HOMEKIT_ACCESSORY(.id=3, .category=homekit_accessory_category_sensor, .services=(homekit_service_t*[]) {
         HOMEKIT_SERVICE(ACCESSORY_INFORMATION, .characteristics=(homekit_characteristic_t*[]) {
             HOMEKIT_CHARACTERISTIC(NAME, "Occupancy Sensor_2"),
-            &name,
+            &manufacturer,
             &serial,
             &model,
             &revision,
@@ -238,7 +267,7 @@ homekit_accessory_t *accessories[] = {
   }),
   HOMEKIT_ACCESSORY(.id=4, .category=homekit_accessory_category_sensor, .services=(homekit_service_t*[]) {
       HOMEKIT_SERVICE(ACCESSORY_INFORMATION, .characteristics=(homekit_characteristic_t*[]) {
-          &name,
+          HOMEKIT_CHARACTERISTIC(NAME, "Occupancy Sensor"),
           &manufacturer,
           &serial,
           &model,
@@ -256,7 +285,7 @@ homekit_accessory_t *accessories[] = {
 
       HOMEKIT_ACCESSORY(.id=5, .category=homekit_accessory_category_sensor, .services=(homekit_service_t*[]) {
           HOMEKIT_SERVICE(ACCESSORY_INFORMATION, .characteristics=(homekit_characteristic_t*[]) {
-              &name,
+              HOMEKIT_CHARACTERISTIC(NAME, "Ambient Light Sensor"),
               &manufacturer,
               &serial,
               &model,
@@ -310,7 +339,6 @@ void user_init(void) {
     create_accessory_name();
     gpio_init();
     sensor_init();
-    wifi_config_init("LuxMotion", "12345678", on_wifi_ready);
 
     if (toggle_create(SENSOR_PIN, sensor_callback, NULL)) {
     printf("Failed to initialize sensor\n");
@@ -318,10 +346,17 @@ void user_init(void) {
     if (toggle_create(SENSOR_PIN_2, sensor_callback_2, NULL)) {
     printf("Failed to initialize sensor\n");
     }
+    if (toggle_create(TOGGLE_PIN_1, toggle_callback_1, NULL)) {
+    printf("Failed to initialize toggle 1 \n");
+    }
+    if (toggle_create(TOGGLE_PIN_2, toggle_callback_2, NULL)) {
+    printf("Failed to initialize toggle 2 \n");
+    }
 
     int c_hash=ota_read_sysparam(&manufacturer.value.string_value,&serial.value.string_value,
-                                  &model.value.string_value,&revision.value.string_value);
+                                      &model.value.string_value,&revision.value.string_value);
     //c_hash=1; revision.value.string_value="0.0.1"; //cheat line
     config.accessories[0]->config_number=c_hash;
+
     homekit_server_init(&config);
 }
