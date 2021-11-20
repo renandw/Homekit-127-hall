@@ -1,0 +1,2 @@
+openssl sha384 -binary -out firmware/127-hall.bin.sig firmware/127-hall.bin
+printf "%08x" `cat firmware/127-hall.bin | wc -c`| xxd -r -p >>firmware/127-hall.bin.sig
