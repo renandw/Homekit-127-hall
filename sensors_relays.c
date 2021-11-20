@@ -122,11 +122,11 @@ void relay_write_2(bool on) {
 }
 
 homekit_characteristic_t lightbulb_on_1 = HOMEKIT_CHARACTERISTIC_(
-    ON, true, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(lightbulb_on_1_callback)
+    ON, false, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(lightbulb_on_1_callback)
 );
 
 homekit_characteristic_t lightbulb_on_2 = HOMEKIT_CHARACTERISTIC_(
-    ON, true, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(lightbulb_on_2_callback)
+    ON, false, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(lightbulb_on_2_callback)
 );
 
 
